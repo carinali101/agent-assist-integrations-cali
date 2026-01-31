@@ -1,4 +1,4 @@
-# Copyright 2024 Google LLC
+# Copyright 2026 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -54,8 +54,23 @@ class Stream:
         # Monitor
         self.audio_encoding = dialogflow.AudioEncoding.AUDIO_ENCODING_MULAW
 
+        self.buffer_byte_size = 0
+
     def fill_buffer(self, in_data, *args, **kwargs):
+        """Append audio data to buffer if not full"""
         self._buff.put(in_data)
+        self.buffer_byte_size += len(in_data)
+        # Drop excessive audio if buffer exceeds 10 seconds (approx 80KB for 8kHz MULAW)
+        max_buffer_bytes = 10 * self._rate * 8 / 8
+       
+        while self.buffer_byte_size > max_buffer_bytes:
+            logging.debug("Buffer size: %s, max buffer size: %s", self.buffer_byte_size, max_buffer_bytes)
+            try:
+                dropped_chunk = self._buff.get_nowait()
+                if dropped_chunk:
+                    self.buffer_byte_size -= len(dropped_chunk)
+            except queue.Empty:
+                break
 
     def define_audio_config(
             self,
@@ -127,12 +142,16 @@ class Stream:
                     "Generator exit from the need to process step %s", e)
                 return
         try:
-            while not self.closed and not self.is_final:
-                if self.speech_end_offset > 110000:
-                    # because Genesys is streaming non-stop the audio,
-                    # put a hard stop when approaching 120 second limit and produce a
-                    # force half close
-                    self.is_final = True
+            while not self.closed:
+                if self.is_final:
+                     # Check if the stream has been running for more than 90 seconds
+                    # or approach the limit of 120 seconds
+                    if self.speech_end_offset > 90000:
+                        logging.info("Stream running for > 90s (%s ms), closing current stream.", self.speech_end_offset)
+                        break
+                    else:
+                        # Continue stream, reset is_final for next result
+                        self.is_final = False
                     break
                 data = []
                 # Use a blocking get() to ensure there's at least one chunk of
@@ -140,6 +159,7 @@ class Stream:
                 # end of the audio stream.
                 try:
                     chunk = self._buff.get(block=True, timeout=0.5)
+                    self.buffer_byte_size -= len(chunk)
                 except queue.Empty:
                     logging.debug(
                         "queue is empty break the loop and stop generator")
@@ -158,6 +178,7 @@ class Stream:
                             logging.debug(
                                 "Remaining chunk is none half close the stream")
                             return
+                        self.buffer_byte_size -= len(chunk)
                         data.append(chunk)
                     except queue.Empty:
                         # queue is empty quitting the loop
