@@ -145,8 +145,7 @@ class Stream:
         try:
             while not self.closed:
                 if self.is_final:
-                     # Check if the stream has been running for more than 90 seconds
-                    # or approach the limit of 120 seconds
+                    # Check if the stream has been running for more than 90 seconds
                     if self.speech_end_offset > 90000:
                         logging.info("Stream running for > 90s (%s ms), closing current stream.", self.speech_end_offset)
                         break
