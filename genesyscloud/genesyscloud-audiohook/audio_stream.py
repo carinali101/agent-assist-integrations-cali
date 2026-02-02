@@ -22,6 +22,7 @@ import google.cloud.dialogflow_v2beta1 as dialogflow
 
 from audiohook_config import config
 
+MAX_BUFFER_SECONDS = 10
 
 class Stream:
     """Opens a stream as a generator yielding the audio chunks.
@@ -61,7 +62,7 @@ class Stream:
         self._buff.put(in_data)
         self.buffer_byte_size += len(in_data)
         # Drop excessive audio if buffer exceeds 10 seconds (approx 80KB for 8kHz MULAW)
-        max_buffer_bytes = 10 * self._rate * 8 / 8
+        max_buffer_bytes = MAX_BUFFER_SECONDS * self._rate
        
         while self.buffer_byte_size > max_buffer_bytes:
             logging.debug("Buffer size: %s, max buffer size: %s", self.buffer_byte_size, max_buffer_bytes)
@@ -150,9 +151,8 @@ class Stream:
                         logging.info("Stream running for > 90s (%s ms), closing current stream.", self.speech_end_offset)
                         break
                     else:
-                        # Continue stream, reset is_final for next result
+                        # Continue stream, reset is_final for next result, sned back the audios to the chunk
                         self.is_final = False
-                    break
                 data = []
                 # Use a blocking get() to ensure there's at least one chunk of
                 # data, and stop iteration if the chunk is None, indicating the
