@@ -151,7 +151,7 @@ class Stream:
                         logging.info("Stream running for > 90s (%s ms), closing current stream.", self.speech_end_offset)
                         break
                     else:
-                        # Continue stream, reset is_final for next result, sned back the audios to the chunk
+                        # Continue stream, reset is_final for next result, send back the audios chunk to the streaming generator
                         self.is_final = False
                 data = []
                 # Use a blocking get() to ensure there's at least one chunk of
