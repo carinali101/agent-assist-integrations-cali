@@ -17,12 +17,12 @@ set -e
 if [ -f .env ]; then
   source .env
 else
-  echo "Error: .env file not found."
+  echo "Error: .env file not found." >&2
   exit 1
 fi
 
 if [ -z "$SERVICE_REGION" ]; then
-  echo "Error: SERVICE_REGION is not set. Check your .env file."
+  echo "Error: SERVICE_REGION is not set. Check your .env file." >&2
   exit 1
 fi
 
