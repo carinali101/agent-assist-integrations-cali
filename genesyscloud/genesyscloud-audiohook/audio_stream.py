@@ -50,7 +50,7 @@ class Stream:
         # Save the audio chunks generated from the start of the audio stream for
         # replay after restart.
         # stt model
-        self.stt_model = "phone_call"
+        self.stt_model = "chirp_3"
         self.audio_input_chunks = []
         self.new_stream = True
         # Only MULAW audio encodings are currently supported in Audiohook
@@ -85,7 +85,7 @@ class Stream:
         """
 
         language_code = conversation_profile.language_code or "en-US"
-        self.stt_model = conversation_profile.stt_config.model
+        self.stt_model = conversation_profile.stt_config.model or "chirp_3"
         audio_input_config = dialogflow.InputAudioConfig(
             audio_encoding=self.audio_encoding,
             sample_rate_hertz=self._rate,
