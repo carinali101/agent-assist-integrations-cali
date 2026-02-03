@@ -127,7 +127,7 @@ class Stream:
             # reference https://en.wikipedia.org/wiki/G.711
             need_to_process_length = min(
                 int(len(audio_bytes) - processed_bytes_length),
-                int(config.max_lookback * self._rate * 8 / 8),
+                int(config.max_lookback * self._rate),
             )
             # Note that you need to explicitly use `int` type for
             # substring.
@@ -147,9 +147,9 @@ class Stream:
         try:
             while not self.closed:
                 if self.is_final:
-                    # Check if the stream has been running for more than 20 seconds
-                    if self.speech_end_offset > 20000:
-                        logging.info("Stream running for > 20s (%s ms), closing current stream.", self.speech_end_offset)
+                    # Check if the stream has been running for more than 90 seconds
+                    if self.speech_end_offset > 90000:
+                        logging.info("Stream running for > 90s (%s ms), closing current stream.", self.speech_end_offset)
                         break
                 data = []
                 # Use a blocking get() to ensure there's at least one chunk of

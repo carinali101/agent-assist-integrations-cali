@@ -19,10 +19,15 @@ FROM python:3.11-slim
 # Copy local code to the container image.
 ENV APP_HOME /app
 WORKDIR $APP_HOME
-COPY . ./
+
+# Copy dependencies first for better caching
+COPY requirements.txt ./
+COPY v2beta1_dialogflow-v2beta1-py.tar ./
 
 # Install production dependencies.
 RUN pip install -r requirements.txt
+
+COPY . ./
 
 # Run the web service on container startup. Here we use the gunicorn
 # webserver, with one worker process and 8 threads.

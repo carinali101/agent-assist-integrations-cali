@@ -291,6 +291,7 @@ class DialogflowAPI:
             participant=participant.name,
             audio_config=audio_config,
             enable_debugging_info=enable_debugging_info,
+            output_multiple_utterances=True,
         )
 
         for content in generator:
@@ -298,6 +299,7 @@ class DialogflowAPI:
             yield dialogflow.StreamingAnalyzeContentRequest(
                 input_audio=content,
                 enable_debugging_info=enable_debugging_info,
+                output_multiple_utterances=True,
             )
 
         logging.info(
