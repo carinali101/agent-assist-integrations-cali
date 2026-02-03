@@ -49,6 +49,8 @@ class Stream:
         self.speech_end_offset = 0
         # Save the audio chunks generated from the start of the audio stream for
         # replay after restart.
+        # stt model
+        self.stt_model = "phone_call"
         self.audio_input_chunks = []
         self.new_stream = True
         # Only MULAW audio encodings are currently supported in Audiohook
@@ -64,13 +66,13 @@ class Stream:
         # Drop excessive audio if buffer exceeds 10 seconds (approx 80KB for 8kHz MULAW)
         max_buffer_bytes = MAX_BUFFER_SECONDS * self._rate
        
-        while self.buffer_byte_size > max_buffer_bytes:
-            logging.debug("Buffer size: %s, max buffer size: %s", self.buffer_byte_size, max_buffer_bytes)
+        while self.buffer_byte_size > max_buffer_bytes:       
             try:
                 dropped_chunk = self._buff.get_nowait()
                 if dropped_chunk:
                     self.buffer_byte_size -= len(dropped_chunk)
             except queue.Empty:
+                logging.debug("Buffer size: %s, max buffer size: %s", self.buffer_byte_size, max_buffer_bytes)
                 break
 
     def define_audio_config(
@@ -83,12 +85,12 @@ class Stream:
         """
 
         language_code = conversation_profile.language_code or "en-US"
-        stt_model = conversation_profile.stt_config.model or "phone_call"
+        self.stt_model = conversation_profile.stt_config.model
         audio_input_config = dialogflow.InputAudioConfig(
             audio_encoding=self.audio_encoding,
             sample_rate_hertz=self._rate,
             language_code=language_code,
-            model=stt_model,
+            model=self.stt_model,
             model_variant="USE_ENHANCED",
             enable_automatic_punctuation=True)
         logging.debug("Input audio config %s ", audio_input_config)
@@ -118,7 +120,7 @@ class Stream:
         self.last_start_time = total_processed_time
         # Send out bytes stored in self.audio_input_chunks that is after the
         # processed_bytes_length.
-        if processed_bytes_length != 0:
+        if processed_bytes_length != 0 and self.stt_model != "chirp_3":
             audio_bytes = b"".join(self.audio_input_chunks)
             # Lookback for unprocessed audio data.
             # ApproximatesBytes = Rate(Sample per Second) * Duration(Seconds) *  BitRate(Bits per Sample) / 8
@@ -145,13 +147,10 @@ class Stream:
         try:
             while not self.closed:
                 if self.is_final:
-                    # Check if the stream has been running for more than 90 seconds
-                    if self.speech_end_offset > 90000:
-                        logging.info("Stream running for > 90s (%s ms), closing current stream.", self.speech_end_offset)
+                    # Check if the stream has been running for more than 20 seconds
+                    if self.speech_end_offset > 20000:
+                        logging.info("Stream running for > 20s (%s ms), closing current stream.", self.speech_end_offset)
                         break
-                    else:
-                        # Continue stream, reset is_final for next result, send back the audios chunk to the streaming generator
-                        self.is_final = False
                 data = []
                 # Use a blocking get() to ensure there's at least one chunk of
                 # data, and stop iteration if the chunk is None, indicating the
