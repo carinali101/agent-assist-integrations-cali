@@ -17,11 +17,14 @@ https://github.com/GoogleCloudPlatform/python-docs-samples/blob/main/dialogflow/
 """
 import logging
 import queue
+import threading
 
 import google.cloud.dialogflow_v2beta1 as dialogflow
 
 from audiohook_config import config
+
 MAX_BUFFER_SECONDS = 10
+SINGLE_STREAM_MAX_DURATION = 90000
 class Stream:
     """Opens a stream as a generator yielding the audio chunks.
     The generator method returns an iterator that contains subsequent audio
@@ -55,23 +58,25 @@ class Stream:
         # Monitor
         self.audio_encoding = dialogflow.AudioEncoding.AUDIO_ENCODING_MULAW
         self.buffer_byte_size = 0
+        self._lock = threading.Lock()
 
     def fill_buffer(self, in_data, *args, **kwargs):
         """Append audio data to buffer if not full"""
 
-        self._buff.put(in_data)
-        self.buffer_byte_size += len(in_data)
-        # Drop excessive audio if buffer exceeds 10 seconds (approx 80KB for 8kHz MULAW)
-        max_buffer_bytes = MAX_BUFFER_SECONDS * self._rate
-       
-        while self.buffer_byte_size > max_buffer_bytes:       
-            try:
-                dropped_chunk = self._buff.get_nowait()
-                if dropped_chunk:
-                    self.buffer_byte_size -= len(dropped_chunk)
-            except queue.Empty:
-                logging.debug("Buffer size: %s, max buffer size: %s", self.buffer_byte_size, max_buffer_bytes)
-                break
+        with self._lock:
+            self._buff.put(in_data)
+            self.buffer_byte_size += len(in_data)
+            # Drop excessive audio if buffer exceeds 10 seconds (approx 80KB for 8kHz MULAW)
+            max_buffer_bytes = MAX_BUFFER_SECONDS * self._rate
+        
+            while self.buffer_byte_size > max_buffer_bytes:       
+                try:
+                    dropped_chunk = self._buff.get_nowait()
+                    if dropped_chunk:
+                        self.buffer_byte_size -= len(dropped_chunk)
+                except queue.Empty:
+                    logging.debug("Buffer size: %s, max buffer size: %s", self.buffer_byte_size, max_buffer_bytes)
+                    break
     def define_audio_config(
             self,
             conversation_profile: dialogflow.ConversationProfile):
@@ -107,7 +112,7 @@ class Stream:
         # dividing 8
         # reference https://en.wikipedia.org/wiki/G.711
         processed_bytes_length = (
-            int(total_processed_time * self._rate * 8 / 8) / 1000
+            int(total_processed_time * self._rate) / 1000
         )
         logging.debug(
             "last start time is %s, is final offset: %s, total processed time %s",
@@ -145,7 +150,7 @@ class Stream:
             while not self.closed:
                 if self.is_final:
                     # Check if the stream has been running for more than 90 seconds
-                    if self.speech_end_offset > 90000:
+                    if self.speech_end_offset > SINGLE_STREAM_MAX_DURATION:
                         logging.info("Stream running for > 90s (%s ms), closing current stream.", self.speech_end_offset)
                         break
                 data = []
@@ -154,7 +159,8 @@ class Stream:
                 # end of the audio stream.
                 try:
                     chunk = self._buff.get(block=True, timeout=0.5)
-                    self.buffer_byte_size -= len(chunk)
+                    with self._lock:
+                        self.buffer_byte_size -= len(chunk)
                 except queue.Empty:
                     logging.debug(
                         "queue is empty break the loop and stop generator")
@@ -173,7 +179,8 @@ class Stream:
                             logging.debug(
                                 "Remaining chunk is none half close the stream")
                             return
-                        self.buffer_byte_size -= len(chunk)
+                        with self._lock:
+                            self.buffer_byte_size -= len(chunk)
                         data.append(chunk)
                     except queue.Empty:
                         # queue is empty quitting the loop
